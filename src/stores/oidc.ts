@@ -2,7 +2,7 @@ import { LoginInfo } from '@/features/oidc';
 import create, { GetState, SetState } from 'zustand';
 
 export type OidcState = {
-  loginInfo?: LoginInfo;
+  loginInfo: LoginInfo | null;
   //   showLogo?: boolean;
   signin: (loginInfo: LoginInfo) => void;
   signout: () => void;
@@ -11,12 +11,14 @@ export type OidcState = {
 export const useOidcState = create<OidcState>((set: SetState<OidcState>) => ({
   loginInfo: null,
   signin: (loginInfo: LoginInfo) =>
-    set((state: OidcState) => ({
-      loginInfo: state.loginInfo,
+    set((state) => ({
+      ...state,
+      loginInfo,
     })),
-  signout: () => ({
+  signout: () => set((state: OidcState) => ({
+    ...state,
     loginInfo: null,
-  }),
+  })),
 }));
 
 // export default {

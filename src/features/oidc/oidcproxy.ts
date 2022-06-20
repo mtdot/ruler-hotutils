@@ -5,10 +5,10 @@ import { clearAppLocalStorageData } from './gl-oidc-redirect-callback';
 // import { signin, signout } from '@/stores/oidc';
 import { useOidcState } from '@/stores/oidc';
 import { Location } from 'history';
-import { ResourcePropagation } from '@gl-commonui/service';
+import { PathConfig } from '@/config';
+// import { ResourcePropagation } from '@gl-commonui/service';
 // import { ResourcePermissionType } from '@gl-commonui/utility';
 // import { setSplash } from '@gl-commonui/states';
-import { PathConfig } from '@/config';
 
 export interface Role {
   id: string;
@@ -36,7 +36,7 @@ export enum OidcStorageKeys {
   logininfo = 'bpr-oidc-logininfo',
 }
 
-export interface OidcProxySettings extends Oidc.UserManagerSettings {}
+export interface OidcProxySettings extends Oidc.UserManagerSettings { }
 
 export interface LoginInfo extends Oidc.User {
   profile: Profile;
@@ -44,7 +44,7 @@ export interface LoginInfo extends Oidc.User {
 }
 
 class ClientStorage {
-  constructor(private logger: Console) {}
+  constructor(private logger: Console) { }
   private getStorage(storage: Storage, key: string) {
     try {
       return storage.getItem(key);
@@ -154,9 +154,8 @@ class ClientStorage {
     }
   }
 }
-const root = `${window.location.protocol}//${window.location.hostname}${
-  window.location.port ? `:${window.location.port}` : ''
-}/#/`;
+const root = `${window.location.protocol}//${window.location.hostname}${window.location.port ? `:${window.location.port}` : ''
+  }/#/`;
 const defaultSettings = {
   authority: GLGlobal.authorityUrl(),
   client_id: GLGlobal.authorityClientId(),
@@ -171,7 +170,7 @@ const defaultSettings = {
   clockSkew: 3600,
 };
 
-const { signin, signout } = useOidcState();
+const { loginInfo, signin, signout } = useOidcState();
 let mgr: Oidc.UserManager;
 export class OidcProxy {
   static accessToken: string | null = null;
@@ -188,7 +187,8 @@ export class OidcProxy {
     });
   }
   static clearSignStorage() {
-    OidcProxy.setLoginInfo(signout(null));
+    signout();
+    OidcProxy.setLoginInfo(loginInfo);
     clearAppLocalStorageData();
     return OidcProxy.clearState();
   }
@@ -208,7 +208,7 @@ export class OidcProxy {
   //     return null;
   // }
 
-  static processUser(user: LoginInfo) {
+  static processUser(user: LoginInfo | null) {
     if (user && !OidcProxy.isExpired(user)) {
       if (!user.profile.roles || user.profile.roles.length === 0) {
         const role = user.profile.role;
@@ -217,17 +217,17 @@ export class OidcProxy {
           user.profile.roleinfos ? JSON.parse(user.profile.roleinfos) : []
         ).map((info: Role) => ({ id: info.id, name: info.name }));
       }
-      return { loggedin: true, ...user };
+      return { ...user, loggedin: true };
     }
     return {
+      ...user,
       loggedin: false,
       profile: {
         roles: [],
         roleInfos: [],
         actions: [],
         avatarUrl: null,
-      },
-      ...user,
+      }
     };
   }
   static getUser(): Promise<LoginInfo> {
@@ -366,17 +366,18 @@ export class OidcProxy {
     OidcProxy.storePageAfterSignout(pageAfterSignout);
     OidcProxy.signoutRedirect();
   }
-  static setLoginInfo(action: { type: string; payload: LoginInfo }, callback?: (d: any) => void) {
-    const payload = OidcProxy.processUser(action.payload);
+  static setLoginInfo(payload: LoginInfo | null, callback?: (d: any) => void) {
+    const processedPayload = OidcProxy.processUser(payload);
     if (callback) {
-      const unSubscribe = GLGlobal.store.subscribe(() => {
-        if (GLGlobal.store.getState().oidc.loginInfo) {
-          unSubscribe();
-          callback(payload);
-        }
-      });
+      // const unSubscribe = GLGlobal.store.subscribe(() => {
+      //   if (GLGlobal.store.getState().oidc.loginInfo) {
+      //     unSubscribe();
+      //     callback(processedPayload);
+      //   }
+      // });
+      callback(processedPayload);
     }
-    GLGlobal.store.dispatch({ ...action, payload });
+    // GLGlobal.store.dispatch({ ...action, payload });
   }
   static getLoginInfo(): LoginInfo {
     return GLGlobal.store.getState().oidc.loginInfo || ({} as LoginInfo);
@@ -389,7 +390,8 @@ export class OidcProxy {
       Promise.resolve(OidcProxy.processUser(user))
         //   .then(OidcProxy.accessTokenScope(OidcProxy.appendPermissions) as any)
         .then((loginInfo: any) => {
-          OidcProxy.setLoginInfo(signin(loginInfo));
+          signin(loginInfo);
+          OidcProxy.setLoginInfo(loginInfo);
           return Promise.resolve(loginInfo);
         })
         .catch((e) => Promise.reject(e))
@@ -585,7 +587,7 @@ export class AuthRouteHandler implements IRouteHandler {
   }
 }
 export class RoleRouteHandler implements IRouteHandler {
-  constructor(private roles: string[]) {}
+  constructor(private roles: string[]) { }
   next: IRouteHandler;
   invoke(context: RouteHandlerContext) {
     OidcRouteRoleGuard(this.next, context, this.roles);
